@@ -92,7 +92,7 @@ function callLabel(call) {
   }
 }
 
-// Some OpenAI-compatible endpoints (e.g. Gemini) reject null fields echoed back.
+// Precaution: stricter OpenAI-compatible endpoints (e.g. Gemini) may reject null fields echoed back.
 function withoutNulls(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v != null));
 }

@@ -4,40 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-CLI chatbot that answers Pokémon questions. An LLM calls tools over PokeAPI (https://pokeapi.co/api/v2) through the OpenAI SDK's Chat Completions API, so it works with any OpenAI-compatible endpoint.
+Web chatbot that answers Pokémon questions. Monorepo with two npm packages (no workspace tooling):
 
-- `pokeapi.py`: data layer, no LLM code. Fetches from PokeAPI (cached forever in `pokeapi_cache.sqlite`), resolves fuzzy names, returns small dicts.
-- `tools.py`: `TOOLS` (one tool schema per public `pokeapi.py` function) and `run_tool(name, args_json)`, which always returns a JSON string. Errors come back as `{"error": ...}`.
-- `bot.py`: chat loop and system prompt. Keeps the full message history and caps tool rounds at 5 per user turn.
+- `backend/`: Node + Express 5 (ESM). An LLM calls tools over PokeAPI (https://pokeapi.co/api/v2) via the OpenAI SDK's Chat Completions API, so any OpenAI-compatible endpoint works (currently configured for Gemini).
+- `frontend/`: React 19 + Vite + Tailwind CSS v3 + lucide-react.
+
+Request flow: `ChatBox.jsx` POSTs the whole conversation `{messages: [{role, content}]}` to `POST /api/chat` → `server.js` validates it → `llmService.chat(history)` runs the tool loop → returns `{reply, toolCalls}`. The server keeps no session state.
+
+- `backend/services/pokeApi.js`: data layer, no LLM code. Fetches from PokeAPI, resolves fuzzy names, returns small filtered objects, and caches filtered results (never raw JSON) in `utils/cache.js`.
+- `backend/services/llmService.js`: `TOOLS` schemas, `runTool(name, argsJson)` (always returns a JSON string; errors come back as `{"error": ...}`), system prompt, and `chat()`. Caps tool rounds at 5 per request, then makes one final call with `tool_choice: 'none'`. Loads `backend/.env`.
+- `backend/server.js`: CORS (single allowed origin), JSON parsing, request validation (roles, 2000 chars per message, last 30 messages kept), and LLM errors mapped to 429/502/500 JSON.
 
 ## Commands
 
 ```sh
-source venv/bin/activate
-pip install -r requirements.txt
-python bot.py       # run the chatbot
-python pokeapi.py   # self-check: data layer (no LLM, no key needed)
-python tools.py     # self-check: schema size + run_tool cases (no LLM, no key needed)
+cd backend && npm install && npm run dev    # API on :3000 (node --watch)
+cd frontend && npm install && npm run dev   # UI on :5173 (strictPort)
+cd backend && npm run check                 # self-check: data layer asserts against PokeAPI (no LLM, no key needed)
+cd frontend && npm run build                # production build; also catches JSX/Tailwind errors
 ```
 
-There is no test framework. The self-checks are the `__main__` blocks of `pokeapi.py` (plain `assert`s) and `tools.py` (prints results). They hit PokeAPI on the first run and the SQLite cache after that.
-
-## Adding or changing a tool
-
-1. Write a public function in `pokeapi.py` that takes one `name` string. Resolve the name with `resolve(resource, name)` (or `_pokemon(name)` for Pokémon), and wrap the returned dict in `_with_match(result, matched_from)` so auto-corrected names get flagged.
-2. Add a schema to `TOOLS` in `tools.py` with `_tool(...)`. The tool name must match the function name exactly, because `FUNCTIONS` looks it up with `getattr(pokeapi, name)`.
-3. Raise `pokeapi.NotFound` for bad input. That is the only exception `run_tool` turns into `{"error": ...}`; anything else (like network errors) crashes the bot.
-
-Every tool takes exactly one `{"name": string}` argument, and schemas use `strict: True`. A tool with other arguments needs changes to both `_tool` and the argument check in `run_tool`.
-
-If the new tool covers something listed under "Limitations" in README.md, update the README and the `SYSTEM_PROMPT` in `bot.py`, which tells the model what it has no data for.
+There is no test framework or linter. `npm run check` runs the `import.meta.main` block at the bottom of `pokeApi.js`.
 
 ## Environment
 
-Set in `.env` (gitignored): `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional, for non-OpenAI endpoints), `OPENAI_MODEL` (defaults to `gpt-5-mini`). README.md has a Gemini free-tier example.
+Set in `backend/.env` (gitignored): `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional, for non-OpenAI endpoints), `OPENAI_MODEL` (defaults to `gpt-5-mini`). Optional: `PORT` (3000), `CORS_ORIGIN` (`http://localhost:5173`). Frontend: `VITE_API_URL` (`http://localhost:3000`). The dev ports and `CORS_ORIGIN` must agree.
+
+## Adding or changing a tool
+
+1. Write an exported async function in `pokeApi.js` that takes one `name` string. Resolve it with `resolve(resource, name)`, wrap the fetch-and-filter in `cached(key, load)` keyed by the resolved API name, and return `withMatch(data, matchedFrom)` so auto-corrected names get flagged.
+2. Add a schema with `tool(...)` to `TOOLS` in `llmService.js`, and map its name to the function in `FUNCTIONS`.
+3. Throw `NotFoundError` for bad input. `runTool` returns its message to the model; any other error becomes a generic "PokeAPI request failed" error.
+
+Every tool takes exactly one `{"name": string}` argument with `strict: true` schemas. A tool with other arguments needs changes to both `tool()` and the argument check in `runTool`.
+
+If a new tool covers a "Limitations" item in README.md, update the README and `SYSTEM_PROMPT`, which tells the model what it has no data for.
+
+## Gotchas
+
+- `cache.js` uses `useClones: false` and stores promises (so parallel calls share one request). Never mutate a cached object; `withMatch` copies before adding `matched_from`.
+- The cache is in-memory with no expiry; it resets on server restart.
+- `chat()` strips null fields from assistant messages before sending them back, as a precaution for stricter OpenAI-compatible endpoints like Gemini's (the old Python bot did the same). Gemini's free tier also rate-limits quickly (surfaces as a 429 from `/api/chat`).
 
 ## Rules
 
-- Keep it simple: plain functions, no frameworks (no LangChain/LangGraph), no over-engineering.
-- Tools return small trimmed dicts, never raw API JSON.
-- Deterministic logic (type math, evolution parsing, unit conversion) lives in Python, not the LLM.
+- Keep it simple: plain functions, no frameworks beyond Express/React (no LangChain/LangGraph), no over-engineering.
+- Tools return small trimmed objects, never raw API JSON.
+- Deterministic logic (type math, evolution parsing, unit conversion) lives in code, not the LLM.
