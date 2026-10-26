@@ -1,3 +1,4 @@
 .env
 venv/
 pokeapi_cache.sqlite
+__pycache__/
