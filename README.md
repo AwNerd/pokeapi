@@ -4,12 +4,7 @@ A web chatbot that answers Pokémon questions. An LLM calls tools over [PokeAPI]
 
 ## Setup
 
-Requires Node 22.18+ (tested on Node 24).
-
-```sh
-cd backend && npm install
-cd ../frontend && npm install
-```
+Requires Node 22.18+ (tested on Node 24) and Python 3 (for `main.py`, standard library only).
 
 Create `backend/.env`. The backend uses the OpenAI SDK, so any OpenAI-compatible endpoint works.
 
@@ -31,14 +26,22 @@ Optional: `PORT` (default `3000`) and `CORS_ORIGIN` (default `http://localhost:5
 
 ## Run
 
-In two terminals:
+From the repo root:
 
 ```sh
-cd backend && npm run dev     # http://localhost:3000
-cd frontend && npm run dev    # http://localhost:5173
+python3 main.py
 ```
 
-Open http://localhost:5173. Each bot reply lists the lookups it made, e.g. `get_pokemon_details(charizard)`.
+The first time, this runs `npm install` in `backend/` and `frontend/`. It then starts both dev servers in one terminal (backend on :3000, frontend on :5173, with `[backend]` / `[frontend]` log prefixes) and opens http://localhost:5173 when the page is ready. Ctrl+C stops both. It exits with a message if `backend/.env` is missing or either port is already taken.
+
+To run the servers yourself, use two terminals:
+
+```sh
+cd backend && npm install && npm run dev     # http://localhost:3000
+cd frontend && npm install && npm run dev    # http://localhost:5173
+```
+
+Each bot reply lists the lookups it made, e.g. `get_pokemon_details(charizard)`.
 
 ## How it works
 

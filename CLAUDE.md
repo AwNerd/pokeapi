@@ -18,6 +18,7 @@ Request flow: `ChatBox.jsx` POSTs the whole conversation `{messages: [{role, con
 ## Commands
 
 ```sh
+python3 main.py                             # installs deps if missing, runs both servers, opens the browser
 cd backend && npm install && npm run dev    # API on :3000 (node --watch)
 cd frontend && npm install && npm run dev   # UI on :5173 (strictPort)
 cd backend && npm run check                 # self-check: data layer asserts against PokeAPI (no LLM, no key needed)
