@@ -20,9 +20,21 @@ python pokeapi.py   # self-check: data layer (no LLM, no key needed)
 python tools.py     # self-check: schema size + run_tool cases (no LLM, no key needed)
 ```
 
+There is no test framework. The self-checks are the `__main__` blocks of `pokeapi.py` (plain `assert`s) and `tools.py` (prints results). They hit PokeAPI on the first run and the SQLite cache after that.
+
+## Adding or changing a tool
+
+1. Write a public function in `pokeapi.py` that takes one `name` string. Resolve the name with `resolve(resource, name)` (or `_pokemon(name)` for Pokémon), and wrap the returned dict in `_with_match(result, matched_from)` so auto-corrected names get flagged.
+2. Add a schema to `TOOLS` in `tools.py` with `_tool(...)`. The tool name must match the function name exactly, because `FUNCTIONS` looks it up with `getattr(pokeapi, name)`.
+3. Raise `pokeapi.NotFound` for bad input. That is the only exception `run_tool` turns into `{"error": ...}`; anything else (like network errors) crashes the bot.
+
+Every tool takes exactly one `{"name": string}` argument, and schemas use `strict: True`. A tool with other arguments needs changes to both `_tool` and the argument check in `run_tool`.
+
+If the new tool covers something listed under "Limitations" in README.md, update the README and the `SYSTEM_PROMPT` in `bot.py`, which tells the model what it has no data for.
+
 ## Environment
 
-Set in `.env` (gitignored): `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional, for non-OpenAI endpoints), `OPENAI_MODEL` (defaults to `gpt-5-mini`).
+Set in `.env` (gitignored): `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional, for non-OpenAI endpoints), `OPENAI_MODEL` (defaults to `gpt-5-mini`). README.md has a Gemini free-tier example.
 
 ## Rules
 

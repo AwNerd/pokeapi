@@ -1,4 +1,6 @@
+node_modules/
 .env
-venv/
-pokeapi_cache.sqlite
-__pycache__/
+dist/
+.DS_Store
+*.log
+*.local
